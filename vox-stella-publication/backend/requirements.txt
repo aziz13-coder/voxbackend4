@@ -1,0 +1,24 @@
+# Core Flask dependencies
+Flask==2.3.3
+Flask-CORS==4.0.0
+
+# Astronomical calculations
+pyswisseph==2.10.3.2
+
+# Geographic and timezone support
+geopy==2.4.1
+timezonefinder==6.2.0
+pytz==2023.3
+
+# HTTP and utility libraries
+requests==2.31.0
+python-dateutil==2.8.2
+
+# YAML configuration support
+PyYAML==6.0.2
+
+# Development dependencies
+python-dotenv==1.0.0
+
+# Production server
+gunicorn==21.2.0
