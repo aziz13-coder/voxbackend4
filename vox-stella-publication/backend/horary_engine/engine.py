@@ -1333,13 +1333,6 @@ class EnhancedTraditionalHoraryJudgmentEngine:
                     f"Moon-Sun education perfection: {moon_sun_perfection['reason']}"
                 )
 
-        # PRIORITY: Determine Moon's next aspect before applying other adjustments
-        moon_next_aspect_result = self._check_moon_next_aspect_to_significators(
-            chart, querent_planet, quesited_planet, ignore_void_moon
-        )
-        if perfection.get("perfects"):
-            moon_next_aspect_result["decisive"] = False
-
         if perfection["perfects"]:
             result = "YES" if perfection["favorable"] else "NO"
             confidence = min(confidence, perfection["confidence"])
@@ -1348,21 +1341,6 @@ class EnhancedTraditionalHoraryJudgmentEngine:
             confidence = self._apply_aspect_direction_adjustment(
                 confidence, perfection, reasoning
             )
-
-            # Incorporate Moon's next aspect testimony before other penalties
-            if moon_next_aspect_result.get("result"):
-                if moon_next_aspect_result.get("result") == "NO":
-                    reasoning.append(
-                        f"Moon's next aspect denies perfection: {moon_next_aspect_result['reason']}"
-                    )
-                else:
-                    reasoning.append(
-                        f"Moon's next aspect supports but cannot perfect: {moon_next_aspect_result['reason']}"
-                    )
-                confidence = min(confidence, moon_next_aspect_result.get("confidence", confidence))
-
-            if moon_next_aspect_result.get("decisive"):
-                reasoning.append("FLAG: MOON_NEXT_DECISIVE")
 
             # CRITICAL FIX 2: Apply retrograde quesited penalty early so bonuses can offset it
             confidence = self._apply_retrograde_quesited_penalty(
@@ -1373,12 +1351,6 @@ class EnhancedTraditionalHoraryJudgmentEngine:
             confidence = self._apply_dignity_confidence_adjustment(
                 confidence, chart, querent_planet, quesited_planet, reasoning
             )
-
-            if (
-                moon_next_aspect_result.get("decisive")
-                and moon_next_aspect_result.get("result") == "YES"
-            ):
-                confidence = max(confidence, 30)
 
             # Clear step-by-step traditional reasoning
             if perfection["type"] == "direct_penalized":
@@ -1467,49 +1439,9 @@ class EnhancedTraditionalHoraryJudgmentEngine:
                 else:
                     reasoning.append("Same ruler unity indicates direct perfection")
             
-            # Get Moon testimony for confidence modification (not decisive)
-            moon_testimony = self._check_enhanced_moon_testimony(chart, querent_planet, quesited_planet, ignore_void_moon)
-            
-            # FIXED: Detect conflicting testimonies and adjust confidence
-            reception = self._detect_reception_between_planets(chart, querent_planet, quesited_planet)
-            has_reception = reception != "none"
-            
-            # Count positive vs negative testimonies for conflict detection
-            positive_testimonies = []
-            negative_testimonies = []
-            
-            # Unity itself is positive
-            positive_testimonies.append("same ruler unity")
-            
-            # Reception is positive
-            if has_reception:
-                positive_testimonies.append(f"reception ({reception})")
-            
-            # Analyze Moon aspects for conflicts
-            if moon_testimony.get("aspects"):
-                favorable_aspects = [a for a in moon_testimony["aspects"] if a.get("favorable")]
-                unfavorable_aspects = [a for a in moon_testimony["aspects"] if not a.get("favorable")]
-                
-                if favorable_aspects:
-                    positive_testimonies.extend([a["description"] for a in favorable_aspects])
-                if unfavorable_aspects:
-                    negative_testimonies.extend([a["description"] for a in unfavorable_aspects])
-            
-            # Calculate confidence based on testimony balance
-            if positive_testimonies and negative_testimonies:
-                # Conflicting testimonies - reduce confidence
-                testimony_conflict_penalty = min(15, len(negative_testimonies) * 5)
-                base_confidence = max(65, base_confidence - testimony_conflict_penalty)
-                reasoning.append(f"Conflicting testimonies reduce certainty ({len(positive_testimonies)} positive, {len(negative_testimonies)} negative)")
-            elif moon_testimony.get("favorable"):
-                base_confidence = min(85, base_confidence + 5)
-                reasoning.append(f"Moon supports unity: {moon_testimony['reason']}")
-            elif moon_testimony.get("unfavorable"):
-                base_confidence = max(70, base_confidence - 5)  # Reduced penalty due to unity
-                reasoning.append(f"Moon testimony concerning but unity remains: {moon_testimony['reason']}")
-            
             # Reception bonus
-            if has_reception:
+            reception = self._detect_reception_between_planets(chart, querent_planet, quesited_planet)
+            if reception != "none":
                 base_confidence = min(90, base_confidence + 3)
                 reasoning.append(f"Reception supports perfection: {reception}")
             
@@ -1552,12 +1484,14 @@ class EnhancedTraditionalHoraryJudgmentEngine:
                     "reception": self._detect_reception_between_planets(chart, querent_planet, quesited_planet),
                     "querent_strength": shared_position.dignity_score,
                     "quesited_strength": shared_position.dignity_score,  # Same ruler = same strength
-                    "moon_void": moon_testimony.get("void_of_course", False)
                 },
                 "solar_factors": solar_factors
             }
         
         # 3.6. PRIORITY: Moon's next applying aspect to significators (traditional key indicator)
+        moon_next_aspect_result = self._check_moon_next_aspect_to_significators(
+            chart, querent_planet, quesited_planet, ignore_void_moon
+        )
         if moon_next_aspect_result.get("result"):
             if moon_next_aspect_result.get("result") == "NO":
                 reasoning.append(
