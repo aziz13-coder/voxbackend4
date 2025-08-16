@@ -1151,28 +1151,6 @@ class EnhancedTraditionalHoraryJudgmentEngine:
         quesited_planet = significators["quesited"]
         
         
-        # Enhanced same-ruler analysis (Fix 2 & 5)
-        same_ruler_bonus = 0
-        if significators.get("same_ruler_analysis"):
-            same_ruler_info = significators["same_ruler_analysis"]
-            reasoning.append(f"Unity factor: {same_ruler_info['interpretation']}")
-            
-            # Traditional horary: same ruler = favorable disposition
-            same_ruler_bonus = 10  # Moderate bonus for unity of purpose
-            
-            # However, must analyze the shared planet's condition more carefully
-            shared_planet = same_ruler_info["shared_ruler"]
-            shared_position = chart.planets[shared_planet]
-            
-            if shared_position.dignity_score > 0:
-                same_ruler_bonus += 5  # Well-dignified shared ruler is very favorable
-                reasoning.append(f"Shared significator {shared_planet.value} is well-dignified (+{shared_position.dignity_score})")
-            elif shared_position.dignity_score < -10:
-                same_ruler_bonus -= 10  # Severely debilitated shared ruler reduces unity benefit
-                reasoning.append(f"Shared significator {shared_planet.value} is severely debilitated ({shared_position.dignity_score})")
-            
-            confidence += same_ruler_bonus
-        
         # Enhanced solar condition analysis
         solar_factors = self._analyze_enhanced_solar_factors(
             chart, querent_planet, quesited_planet, ignore_combustion)
@@ -1413,150 +1391,21 @@ class EnhancedTraditionalHoraryJudgmentEngine:
                 "solar_factors": solar_factors,
             }
         
-        # 3.5. Traditional Same-Ruler Logic (FIXED: Unity defaults to YES unless explicit prohibition)
+        # 3.5. Traditional Same-Ruler Logic (now evaluated only when needed)
         if significators.get("same_ruler_analysis"):
-            same_ruler_info = significators["same_ruler_analysis"]
-            shared_planet = same_ruler_info["shared_ruler"]
-            shared_position = chart.planets[shared_planet]
-            
-            # Unity indicates perfection - default to YES
-            result = "YES"
-            base_confidence = 75  # Good confidence for unity
-            timing_description = "Moderate timeframe"
-            
-            # Check for explicit prohibitions that could deny the unity
-            prohibitions = []
-            
-            # Check for severe debilitation that could deny
-            if shared_position.dignity_score <= -10:
-                prohibitions.append("Shared significator severely debilitated")
-            
-            # Check for combustion (if not ignored)
-            if not ignore_combustion and any(
-                analysis.condition in ["Combustion", "Under the Beams"] 
-                for analysis in solar_factors.get("detailed_analyses", {}).values() 
-                if analysis["planet"] == shared_planet
-            ):
-                prohibitions.append("Shared significator combust/under beams")
-            
-            # Check for explicit refranation or frustration
-            if shared_position.retrograde and shared_position.dignity_score < -5:
-                prohibitions.append("Shared significator retrograde and weak (refranation)")
-            
-            # If explicit prohibitions exist, deny
-            if prohibitions:
-                result = "NO"
-                base_confidence = 80
-                reasoning.append(f"Same ruler unity denied: {', '.join(prohibitions)}")
-            else:
-                # Unity perfected - check for conditions/modifications
-                conditions = []
-                
-                # Retrograde indicates delays/conditions, not denial
-                if shared_position.retrograde:
-                    conditions.append("with delays/renegotiation (retrograde)")
-                    timing_description = "Delayed/with conditions"
-                
-                # Poor dignity indicates difficulty but not denial
-                if -10 < shared_position.dignity_score < 0:
-                    conditions.append("with difficulty")
-                
-                if conditions:
-                    result = "YES"
-                    reasoning.append(f"Same ruler unity perfected {' '.join(conditions)}")
-                else:
-                    reasoning.append("Same ruler unity indicates direct perfection")
-            
-            # Get Moon testimony for confidence modification (not decisive)
-            moon_testimony = self._check_enhanced_moon_testimony(chart, querent_planet, quesited_planet, ignore_void_moon)
-            
-            # FIXED: Detect conflicting testimonies and adjust confidence
-            reception = self._detect_reception_between_planets(chart, querent_planet, quesited_planet)
-            has_reception = reception != "none"
-            
-            # Count positive vs negative testimonies for conflict detection
-            positive_testimonies = []
-            negative_testimonies = []
-            
-            # Unity itself is positive
-            positive_testimonies.append("same ruler unity")
-            
-            # Reception is positive
-            if has_reception:
-                positive_testimonies.append(f"reception ({reception})")
-            
-            # Analyze Moon aspects for conflicts
-            if moon_testimony.get("aspects"):
-                favorable_aspects = [a for a in moon_testimony["aspects"] if a.get("favorable")]
-                unfavorable_aspects = [a for a in moon_testimony["aspects"] if not a.get("favorable")]
-                
-                if favorable_aspects:
-                    positive_testimonies.extend([a["description"] for a in favorable_aspects])
-                if unfavorable_aspects:
-                    negative_testimonies.extend([a["description"] for a in unfavorable_aspects])
-            
-            # Calculate confidence based on testimony balance
-            if positive_testimonies and negative_testimonies:
-                # Conflicting testimonies - reduce confidence
-                testimony_conflict_penalty = min(15, len(negative_testimonies) * 5)
-                base_confidence = max(65, base_confidence - testimony_conflict_penalty)
-                reasoning.append(f"Conflicting testimonies reduce certainty ({len(positive_testimonies)} positive, {len(negative_testimonies)} negative)")
-            elif moon_testimony.get("favorable"):
-                base_confidence = min(85, base_confidence + 5)
-                reasoning.append(f"Moon supports unity: {moon_testimony['reason']}")
-            elif moon_testimony.get("unfavorable"):
-                base_confidence = max(70, base_confidence - 5)  # Reduced penalty due to unity
-                reasoning.append(f"Moon testimony concerning but unity remains: {moon_testimony['reason']}")
-            
-            # Reception bonus
-            if has_reception:
-                base_confidence = min(90, base_confidence + 3)
-                reasoning.append(f"Reception supports perfection: {reception}")
-            
-            # FIXED: Check Moon's dual roles (house ruler vs co-significator)
-            moon_house_roles = []
-            for house_num, ruler in chart.house_rulers.items():
-                if ruler == Planet.MOON:
-                    moon_house_roles.append(house_num)
-            
-            if moon_house_roles:
-                relevant_moon_roles = []
-                for house in moon_house_roles:
-                    if house in [1, 2, 7, 8, 10, 11]:  # Houses potentially relevant to financial/approval questions
-                        relevant_moon_roles.append(house)
-                
-                if relevant_moon_roles:
-                    # Moon as house ruler should be analyzed separately from general testimony
-                    moon_as_ruler_condition = chart.planets[Planet.MOON]
-                    
-                    if moon_as_ruler_condition.dignity_score >= 0:
-                        base_confidence = min(88, base_confidence + 3)
-                        reasoning.append(f"Moon as L{',L'.join(map(str, relevant_moon_roles))} well-positioned supports perfection")
-                    elif moon_as_ruler_condition.dignity_score < -5:
-                        base_confidence = max(65, base_confidence - 5)
-                        reasoning.append(f"Moon as L{',L'.join(map(str, relevant_moon_roles))} poorly positioned creates uncertainty")
-                    
-                    # For loan applications, L10 (authority) is especially important
-                    if 10 in relevant_moon_roles:
-                        reasoning.append("Moon as L10 (authority/decision-maker) is key to approval process")
-            
-            timing = self._calculate_enhanced_timing(chart, {"type": "same_ruler_unity", "planet": shared_planet})
-            
-            return {
-                "result": result,
-                "confidence": base_confidence,
-                "reasoning": reasoning,
-                "timing": timing,
-                "traditional_factors": {
-                    "perfection_type": "same_ruler_unity",
-                    "reception": self._detect_reception_between_planets(chart, querent_planet, quesited_planet),
-                    "querent_strength": shared_position.dignity_score,
-                    "quesited_strength": shared_position.dignity_score,  # Same ruler = same strength
-                    "moon_void": moon_testimony.get("void_of_course", False)
-                },
-                "solar_factors": solar_factors
-            }
-        
+            unity_result = self.evaluate_same_ruler_unity(
+                chart,
+                significators,
+                querent_planet,
+                quesited_planet,
+                ignore_combustion,
+                solar_factors,
+                ignore_void_moon,
+                reasoning,
+            )
+            if unity_result:
+                return unity_result
+
         # 3.6. PRIORITY: Moon's next applying aspect to significators (traditional key indicator)
         if moon_next_aspect_result.get("result"):
             if moon_next_aspect_result.get("result") == "NO":
@@ -1722,6 +1571,140 @@ class EnhancedTraditionalHoraryJudgmentEngine:
                 "benefic_noted": benefic_support.get("total_score", 0) > 0
             },
             "solar_factors": solar_factors
+        }
+
+    def evaluate_same_ruler_unity(
+        self,
+        chart: HoraryChart,
+        significators: Dict,
+        querent_planet: Planet,
+        quesited_planet: Planet,
+        ignore_combustion: bool,
+        solar_factors: Dict[str, Any],
+        ignore_void_moon: bool,
+        reasoning: List[str],
+    ) -> Optional[Dict[str, Any]]:
+        """Evaluate unity when both significators share the same ruler."""
+        same_ruler_info = significators.get("same_ruler_analysis")
+        if not same_ruler_info:
+            return None
+
+        reasoning.append(f"Unity factor: {same_ruler_info['interpretation']}")
+        shared_planet = same_ruler_info["shared_ruler"]
+        shared_position = chart.planets[shared_planet]
+
+        result = "YES"
+        base_confidence = 75
+
+        prohibitions: List[str] = []
+        if shared_position.dignity_score <= -10:
+            prohibitions.append("Shared significator severely debilitated")
+
+        if not ignore_combustion and any(
+            analysis.condition in ["Combustion", "Under the Beams"]
+            for analysis in solar_factors.get("detailed_analyses", {}).values()
+            if analysis["planet"] == shared_planet
+        ):
+            prohibitions.append("Shared significator combust/under beams")
+
+        if shared_position.retrograde and shared_position.dignity_score < -5:
+            prohibitions.append("Shared significator retrograde and weak (refranation)")
+
+        if prohibitions:
+            result = "NO"
+            base_confidence = 80
+            reasoning.append(f"Same ruler unity denied: {', '.join(prohibitions)}")
+        else:
+            conditions: List[str] = []
+            if shared_position.retrograde:
+                conditions.append("with delays/renegotiation (retrograde)")
+            if -10 < shared_position.dignity_score < 0:
+                conditions.append("with difficulty")
+            if conditions:
+                reasoning.append(f"Same ruler unity perfected {' '.join(conditions)}")
+            else:
+                reasoning.append("Same ruler unity indicates direct perfection")
+
+        moon_testimony = self._check_enhanced_moon_testimony(
+            chart, querent_planet, quesited_planet, ignore_void_moon
+        )
+
+        reception = self._detect_reception_between_planets(chart, querent_planet, quesited_planet)
+        has_reception = reception != "none"
+
+        positive_testimonies: List[str] = ["same ruler unity"]
+        negative_testimonies: List[str] = []
+
+        if has_reception:
+            positive_testimonies.append(f"reception ({reception})")
+
+        if moon_testimony.get("aspects"):
+            favorable_aspects = [a for a in moon_testimony["aspects"] if a.get("favorable")]
+            unfavorable_aspects = [a for a in moon_testimony["aspects"] if not a.get("favorable")]
+            if favorable_aspects:
+                positive_testimonies.extend([a["description"] for a in favorable_aspects])
+            if unfavorable_aspects:
+                negative_testimonies.extend([a["description"] for a in unfavorable_aspects])
+
+        if positive_testimonies and negative_testimonies:
+            testimony_conflict_penalty = min(15, len(negative_testimonies) * 5)
+            base_confidence = max(65, base_confidence - testimony_conflict_penalty)
+            reasoning.append(
+                f"Conflicting testimonies reduce certainty ({len(positive_testimonies)} positive, {len(negative_testimonies)} negative)"
+            )
+        elif moon_testimony.get("favorable"):
+            base_confidence = min(85, base_confidence + 5)
+            reasoning.append(f"Moon supports unity: {moon_testimony['reason']}")
+        elif moon_testimony.get("unfavorable"):
+            base_confidence = max(70, base_confidence - 5)
+            reasoning.append(f"Moon testimony concerning but unity remains: {moon_testimony['reason']}")
+
+        if has_reception:
+            base_confidence = min(90, base_confidence + 3)
+            reasoning.append(f"Reception supports perfection: {reception}")
+
+        moon_house_roles: List[int] = []
+        for house_num, ruler in chart.house_rulers.items():
+            if ruler == Planet.MOON:
+                moon_house_roles.append(house_num)
+
+        if moon_house_roles:
+            relevant_moon_roles: List[int] = []
+            for house in moon_house_roles:
+                if house in [1, 2, 7, 8, 10, 11]:
+                    relevant_moon_roles.append(house)
+
+            if relevant_moon_roles:
+                moon_as_ruler_condition = chart.planets[Planet.MOON]
+                if moon_as_ruler_condition.dignity_score >= 0:
+                    base_confidence = min(88, base_confidence + 3)
+                    reasoning.append(
+                        f"Moon as L{',L'.join(map(str, relevant_moon_roles))} well-positioned supports perfection"
+                    )
+                elif moon_as_ruler_condition.dignity_score < -5:
+                    base_confidence = max(65, base_confidence - 5)
+                    reasoning.append(
+                        f"Moon as L{',L'.join(map(str, relevant_moon_roles))} poorly positioned creates uncertainty"
+                    )
+
+                if 10 in relevant_moon_roles:
+                    reasoning.append("Moon as L10 (authority/decision-maker) is key to approval process")
+
+        timing = self._calculate_enhanced_timing(chart, {"type": "same_ruler_unity", "planet": shared_planet})
+
+        return {
+            "result": result,
+            "confidence": base_confidence,
+            "reasoning": reasoning,
+            "timing": timing,
+            "traditional_factors": {
+                "perfection_type": "same_ruler_unity",
+                "reception": self._detect_reception_between_planets(chart, querent_planet, quesited_planet),
+                "querent_strength": shared_position.dignity_score,
+                "quesited_strength": shared_position.dignity_score,
+                "moon_void": moon_testimony.get("void_of_course", False),
+            },
+            "solar_factors": solar_factors,
         }
     
     
